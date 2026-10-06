@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alcohol Detection | Real-Time Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --bg-color: #050505;
+            --emerald: #10b981;
+            --neon-red: #ff3131;
+            --glass: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-main: #ffffff;
+            --text-dim: #a1a1aa;
+            --aura-color: var(--emerald);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-image:
+                radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.05) 0%, transparent 70%);
+            transition: background-image 0.5s ease;
+        }
+
+        body.danger {
+            background-image:
+                radial-gradient(circle at 50% 50%, rgba(255, 49, 49, 0.05) 0%, transparent 70%);
+        }
+
+        /* --- BACKGROUND DECOR --- */
+        .grid-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+            background-size: 50px 50px;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* --- THE AURA --- */
+        .dashboard-container {
+            position: relative;
+            z-index: 10;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2rem;
+        }
+
+        .aura-wrapper {
+            position: relative;
+            width: 350px;
+            height: 350px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .aura-circle {
+            position: absolute;
+            width: 280px;
+            height: 280px;
+            border-radius: 50%;
+            background: var(--aura-color);
+            filter: blur(60px);
+            opacity: 0.3;
+            transition: background 0.8s ease, transform 0.5s ease;
+            animation: pulse 3s infinite ease-in-out;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 0.3;
+            }
+
+            50% {
+                transform: scale(1.2);
+                opacity: 0.5;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 0.3;
+            }
+        }
+
+        .danger .aura-circle {
+            animation: danger-pulse 0.8s infinite alternate;
+            filter: blur(80px);
+            opacity: 0.6;
+        }
+
+        @keyframes danger-pulse {
+            from {
+                transform: scale(1);
+                opacity: 0.4;
+            }
+
+            to {
+                transform: scale(1.4);
+                opacity: 0.8;
+            }
+        }
+
+        .value-display {
+            position: relative;
+            z-index: 5;
+        }
+
+        .ppm-value {
+            font-size: 6rem;
+            font-weight: 700;
+            letter-spacing: -2px;
+            line-height: 1;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 0 30px rgba(255, 255, 255, 0.1);
+        }
+
+        .ppm-label {
+            font-size: 1rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            font-weight: 400;
+        }
+
+        .status-badge {
+            padding: 8px 16px;
+            border-radius: 100px;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            backdrop-filter: blur(10px);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--aura-color);
+            box-shadow: 0 0 10px var(--aura-color);
+        }
+
+        /* --- BUTTONS --- */
+        .action-btn {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .action-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+
+        /* --- SIDE PANEL --- */
+        .side-panel {
+            position: fixed;
+            top: 0;
+            right: -450px;
+            width: 400px;
+            height: 100%;
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(30px);
+            border-left: 1px solid var(--glass-border);
+            z-index: 100;
+            transition: right 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            flex-direction: column;
+            padding: 2rem;
+        }
+
+        .side-panel.open {
+            right: 0;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .panel-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            cursor: pointer;
+            font-size: 1.5rem;
+        }
+
+        .history-list {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+
+        .history-list::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .history-list::-webkit-scrollbar-thumb {
+            background: var(--glass-border);
+            border-radius: 10px;
+        }
+
+        .history-item {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            padding: 1.25rem;
+            border-radius: 16px;
+            margin-bottom: 1rem;
+            animation: slideIn 0.4s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+
+        .item-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--neon-red);
+        }
+
+        /* --- NOTIFICATION --- */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--neon-red);
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            font-weight: 600;
+            z-index: 1000;
+            transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 10px 40px rgba(255, 49, 49, 0.4);
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="grid-overlay"></div>
+
+    <div class="dashboard-container">
+        <div class="status-badge">
+            <div class="status-dot"></div>
+            <span id="status-text">SYSTEM SECURE</span>
+        </div>
+
+        <div class="aura-wrapper">
+            <div class="aura-circle" id="aura"></div>
+            <div class="value-display">
+                <div class="ppm-value" id="level-display">000</div>
+                <div class="ppm-label">RAW LEVEL</div>
+            </div>
+        </div>
+
+        <button class="action-btn" onclick="togglePanel()">VIEW INCIDENT HISTORY</button>
+    </div>
+
+    <!-- SIDE PANEL -->
+    <div class="side-panel" id="side-panel">
+        <div class="panel-header">
+            <h2 class="panel-title">Incidents</h2>
+            <button class="close-btn" onclick="togglePanel()">&times;</button>
+        </div>
+        <div class="history-list" id="history-container">
+            <!-- Items injected here -->
+        </div>
+    </div>
+
+    <div class="toast" id="alert-toast">🚨 HIGH ALCOHOL LEVEL DETECTED</div>
+
+    <script>
+        // --- SUPABASE CONFIG ---
+        const SUPABASE_URL = "YOUR_SUPABASE_URL";
+        const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let currentLevel = 0;
+        let lastLoggedLevel = 0;
+
+        // --- DOM ELEMENTS ---
+        const aura = document.getElementById('aura');
+        const levelDisplay = document.getElementById('level-display');
+        const statusText = document.getElementById('status-text');
+        const sidePanel = document.getElementById('side-panel');
+        const historyContainer = document.getElementById('history-container');
+        const toast = document.getElementById('alert-toast');
+
+        function togglePanel() {
+            sidePanel.classList.toggle('open');
+        }
+
+        function updateUI(level) {
+            currentLevel = level;
+            levelDisplay.innerText = level.toString().padStart(3, '0');
+
+            if (level >= 600) {
+                document.body.classList.add('danger');
+                document.documentElement.style.setProperty('--aura-color', 'var(--neon-red)');
+                statusText.innerText = "WARNING: HIGH LEVELS";
+                showToast();
+            } else {
+                document.body.classList.remove('danger');
+                document.documentElement.style.setProperty('--aura-color', 'var(--emerald)');
+                statusText.innerText = "SYSTEM SECURE";
+                hideToast();
+            }
+        }
+
+        function showToast() {
+            toast.classList.add('show');
+        }
+
+        function hideToast() {
+            toast.classList.remove('show');
+        }
+
+        function addHistoryItem(level, timestamp) {
+            const date = new Date(timestamp).toLocaleTimeString();
+            const item = document.createElement('div');
+            item.className = 'history-item';
+            item.innerHTML = `
+                <div class="item-header">
+                    <span>Intoxication Event</span>
+                    <span>${date}</span>
+                </div>
+                <div class="item-value">${level} PPM</div>
+            `;
+            historyContainer.prepend(item);
+        }
+
+        // --- FETCH DATA ---
+        async function fetchLatestData() {
+            const { data, error } = await supabaseClient
+                .from('alcohol_logs')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+            if (data && data.length > 0) {
+                const latest = data[0];
+                updateUI(latest.level);
+            }
+        }
+
+        // Realtime Subscription
+        const channel = supabaseClient
+            .channel('alcohol_logs_changes')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'alcohol_logs' }, payload => {
+                const newLevel = payload.new.level;
+                updateUI(newLevel);
+
+                // If it's an intoxication event (>= 600), add to log
+                if (newLevel >= 600) {
+                    addHistoryItem(newLevel, payload.new.created_at);
+                }
+            })
+            .subscribe();
+
+        // Initial fetch for history
+        async function loadHistory() {
+            const { data, error } = await supabaseClient
+                .from('alcohol_logs')
+                .select('*')
+                .gte('level', 600)
+                .order('created_at', { ascending: false })
+                .limit(20);
+
+            if (data) {
+                data.forEach(item => addHistoryItem(item.level, item.created_at));
+            }
+        }
+
+        // Initialize
+        fetchLatestData();
+        loadHistory();
+
+        // Fallback polling (every 2 seconds) just in case Realtime is slow to connect
+        setInterval(fetchLatestData, 2000);
+    </script>
+</body>
+
+</html>
